@@ -1,0 +1,16 @@
+{
+  "name": "lsap-cicd-app",
+  "version": "1.0.0",
+  "description": "LSAP CI/CD Demo App",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "eslint": "^8.56.0"
+  }
+}
