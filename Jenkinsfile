@@ -1,108 +1,88 @@
 pipeline {
-    // 在任何可用的 agent 上執行
     agent any
     
-    // 環境變數設定，請改成你的資訊
     environment {
         DOCKER_HUB_USER = 'peggy123'
         APP_NAME = 'lsap-cicd-app'
-        DISCORD_WEBHOOK = 'https://discord.com/api/webhooks/1443664242690490419/3JbqXB10nI4EBPFTKZ_n9I5Y8WjaQSMPG3eGT-OSCdznmPPAD0Gf6i8nBfv1eAr4dmm-'
+        DISCORD_WEBHOOK = '你的Discord_Webhook_URL'
     }
     
     stages {
-        // ===== 第一階段：程式碼靜態分析（所有分支都會跑）=====
         stage('Static Analysis') {
             steps {
-                echo 'Running ESLint...'
-                sh 'npm install'          // 安裝相依套件
-                sh 'npm run lint'         // 執行 eslint 檢查
+                echo '📋 Running ESLint...'
+                sh 'npm install'
+                sh 'npm run lint'
             }
         }
         
-        // ===== 第二階段：Dev 分支 - 建置並部署到 Staging =====
         stage('Build and Deploy to Staging') {
-            // 只有 dev 分支才執行這個 stage
             when {
                 branch 'dev'
             }
             steps {
-                echo '🔨 Building Docker image...'
-                
-                // 建立 Docker image，標記為 dev-建置編號
-                sh "docker build -t ${DOCKER_HUB_USER}/${APP_NAME}:dev-${BUILD_NUMBER} ."
-                
-                // 登入 Docker Hub 並推送
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-credentials',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    sh "echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin"
-                    sh "docker push ${DOCKER_HUB_USER}/${APP_NAME}:dev-${BUILD_NUMBER}"
-                }
-                
-                echo '🚀 Deploying to Staging (Port 8081)...'
-                
-                // 移除舊的容器（如果存在的話，-f 強制移除）
-                sh 'docker rm -f dev-app || true'
-                
-                // 啟動新容器
-                sh "docker run -d --name dev-app -p 8081:3000 ${DOCKER_HUB_USER}/${APP_NAME}:dev-${BUILD_NUMBER}"
-                
-                // 等待應用程式啟動
-                sh 'sleep 5'
-                
-                // 健康檢查
-                echo '🏥 Health check...'
-                sh 'curl -f http://localhost:8081/health'
-            }
-        }
-        
-        // ===== 第三階段：Main 分支 - GitOps 部署到 Production =====
-        stage('Deploy to Production (GitOps)') {
-            // 只有 main 分支才執行
-            when {
-                branch 'main'
-            }
-            steps {
                 script {
-                    // 讀取 deploy.config 檔案，取得要部署的版本
-                    def targetTag = readFile('deploy.config').trim()
-                    echo "📦 Target version from GitOps config: ${targetTag}"
+                    // 讀取 package.json 的 version
+                    def packageJson = readJSON file: 'package.json'
+                    def version = packageJson.version
+                    echo "📦 Version from package.json: v${version}"
                     
-                    // 登入 Docker Hub
+                    echo '🔨 Building Docker image...'
+                    sh "docker build -t ${DOCKER_HUB_USER}/${APP_NAME}:dev-${BUILD_NUMBER} ."
+                    
+                    // 多 tag 一個 semantic version
+                    sh "docker tag ${DOCKER_HUB_USER}/${APP_NAME}:dev-${BUILD_NUMBER} ${DOCKER_HUB_USER}/${APP_NAME}:v${version}"
+                    
                     withCredentials([usernamePassword(
                         credentialsId: 'dockerhub-credentials',
                         usernameVariable: 'DOCKER_USER',
                         passwordVariable: 'DOCKER_PASS'
                     )]) {
                         sh "echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin"
-                        
-                        // 拉取指定版本的 image
+                        sh "docker push ${DOCKER_HUB_USER}/${APP_NAME}:dev-${BUILD_NUMBER}"
+                        sh "docker push ${DOCKER_HUB_USER}/${APP_NAME}:v${version}"
+                    }
+                    
+                    echo '🚀 Deploying to Staging (Port 8081)...'
+                    sh 'docker rm -f dev-app || true'
+                    sh "docker run -d --name dev-app -p 8081:3000 ${DOCKER_HUB_USER}/${APP_NAME}:dev-${BUILD_NUMBER}"
+                    
+                    sh 'sleep 5'
+                    echo '🏥 Health check...'
+                    sh 'curl -f http://localhost:8081/health'
+                }
+            }
+        }
+        
+        stage('Deploy to Production (GitOps)') {
+            when {
+                branch 'main'
+            }
+            steps {
+                script {
+                    def targetTag = readFile('deploy.config').trim()
+                    echo "📦 Target version from GitOps config: ${targetTag}"
+                    
+                    withCredentials([usernamePassword(
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )]) {
+                        sh "echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin"
                         sh "docker pull ${DOCKER_HUB_USER}/${APP_NAME}:${targetTag}"
-                        
-                        // 重新標記為 production 版本
                         sh "docker tag ${DOCKER_HUB_USER}/${APP_NAME}:${targetTag} ${DOCKER_HUB_USER}/${APP_NAME}:prod-${BUILD_NUMBER}"
-                        
-                        // 推送 production 標籤到 Docker Hub
                         sh "docker push ${DOCKER_HUB_USER}/${APP_NAME}:prod-${BUILD_NUMBER}"
                     }
                     
                     echo '🚀 Deploying to Production (Port 8082)...'
-                    
-                    // 移除舊的 production 容器
                     sh 'docker rm -f prod-app || true'
-                    
-                    // 啟動新的 production 容器
                     sh "docker run -d --name prod-app -p 8082:3000 ${DOCKER_HUB_USER}/${APP_NAME}:prod-${BUILD_NUMBER}"
                 }
             }
         }
     }
     
-    // ===== 建置完成後的動作 =====
     post {
-        // 失敗時發送 Discord 通知
         failure {
             script {
                 def payload = """{
@@ -126,7 +106,6 @@ pipeline {
             }
         }
         
-        // 成功時也可以通知（可選）
         success {
             echo '✅ Build completed successfully!'
         }

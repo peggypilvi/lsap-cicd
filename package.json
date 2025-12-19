@@ -1,6 +1,6 @@
 {
   "name": "lsap-cicd-app",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "LSAP CI/CD Demo App",
   "main": "app.js",
   "scripts": {
