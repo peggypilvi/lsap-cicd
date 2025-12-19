@@ -3,7 +3,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-  res.json({ message: 'Hello from LSAP CI/CD App v2!' });  // 加個 v2
+  res.json({ message: 'Hello from LSAP CI/CD App v3!' });  // 加個 v2
 });
 
 app.get('/health', (req, res) => {
