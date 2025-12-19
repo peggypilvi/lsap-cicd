@@ -4,7 +4,7 @@ pipeline {
     environment {
         DOCKER_HUB_USER = 'peggy123'
         APP_NAME = 'lsap-cicd-app'
-        DISCORD_WEBHOOK = '你的Discord_Webhook_URL'
+        DISCORD_WEBHOOK = '[https://discord.com/api/webhooks/1443664242690490419/3JbqXB10nI4EBPFTKZ_n9I5Y8WjaQSMPG3eGT-OSCdznmPPAD0Gf6i8nBfv1eAr4dmm-](https://discord.com/api/webhooks/1443664242690490419/3JbqXB10nI4EBPFTKZ_n9I5Y8WjaQSMPG3eGT-OSCdznmPPAD0Gf6i8nBfv1eAr4dmm-)'
     }
     
     stages {
@@ -22,9 +22,8 @@ pipeline {
             }
             steps {
                 script {
-                    // 讀取 package.json 的 version
-                    def packageJson = readJSON file: 'package.json'
-                    def version = packageJson.version
+                    // 用 shell 指令讀取 package.json 的 version
+                    def version = sh(script: "grep '\"version\"' package.json | cut -d'\"' -f4", returnStdout: true).trim()
                     echo "📦 Version from package.json: v${version}"
                     
                     echo '🔨 Building Docker image...'
